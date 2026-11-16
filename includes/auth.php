@@ -146,7 +146,39 @@ function requireLogin(): void
 function requireRole(array $allowedRoles): void
 {
     requireLogin();
-    $user = currentUser();
+    require_once __DIR__ . '/db.php';
+    $userId = (int)currentUser()['id'];
+    $stmt = db()->prepare('SELECT u.username, u.email, u.role, u.status, u.approval_status, sp.full_name, sp.student_number
+        FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id WHERE u.id = ?');
+    if (!$stmt) {
+        error_log('CourtIQ could not verify the current account authorization.');
+        http_response_code(503);
+        exit('Account authorization is temporarily unavailable.');
+    }
+    $stmt->bind_param('i', $userId);
+    if (!$stmt->execute()) {
+        error_log('CourtIQ could not execute the current account authorization check: ' . $stmt->error);
+        $stmt->close();
+        http_response_code(503);
+        exit('Account authorization is temporarily unavailable.');
+    }
+    $user = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$user || $user['status'] !== 'active' || $user['approval_status'] !== 'approved') {
+        logoutUser();
+        $error = !$user ? 'login_required' : ($user['approval_status'] === 'pending' ? 'approval_pending' : ($user['approval_status'] === 'rejected' ? 'approval_rejected' : 'account_inactive'));
+        header('Location: ' . projectUrl('login.php?error=' . $error));
+        exit();
+    }
+
+    $_SESSION['courtiq_user']['username'] = $user['username'];
+    $_SESSION['courtiq_user']['email'] = $user['email'];
+    $_SESSION['courtiq_user']['role'] = $user['role'];
+    $_SESSION['courtiq_user']['status'] = $user['status'];
+    $_SESSION['courtiq_user']['approval_status'] = $user['approval_status'];
+    $_SESSION['courtiq_user']['full_name'] = $user['full_name'];
+    $_SESSION['courtiq_user']['student_number'] = $user['student_number'];
 
     if (!$user || !in_array($user['role'], $allowedRoles, true)) {
         header('Location: ' . projectUrl('login.php?error=unauthorized'));

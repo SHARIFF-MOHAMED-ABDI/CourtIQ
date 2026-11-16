@@ -19,13 +19,18 @@ CREATE TABLE IF NOT EXISTS `users` (
     `password_hash` VARCHAR(255) NOT NULL,
     `role` ENUM('student', 'warden', 'administrator') NOT NULL,
     `status` ENUM('active', 'inactive', 'suspended') NOT NULL DEFAULT 'active',
+    `approval_status` ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'approved',
+    `approval_decided_by` INT DEFAULT NULL,
+    `approval_decided_at` DATETIME DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_users_role` (`role`),
-    INDEX `idx_users_status` (`status`)
+    INDEX `idx_users_status` (`status`),
+    INDEX `idx_users_approval_status` (`approval_status`, `role`),
+    FOREIGN KEY (`approval_decided_by`) REFERENCES `users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Seed Accounts (Pass: admin123, warden123, student123)
+-- Development seed accounts use password hashes; reset them before deployment.
 INSERT INTO `users` (`id`, `username`, `email`, `password_hash`, `role`, `status`) VALUES
 (1, 'admin', 'admin@courtiq.local', '$2y$10$lhk7EUrx5NdgqC4xc8dPA.3ilqzqKPfKeCi6cfO5W6MNJutb4FAQO', 'administrator', 'active'),
 (2, 'warden', 'warden@courtiq.local', '$2y$10$eo9SyBR6sNlCj4.3zwQl6utzep31OEJmX0Owyn1guoNIl3.M/t9hm', 'warden', 'active'),
@@ -106,25 +111,49 @@ ON DUPLICATE KEY UPDATE
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `maintenance_requests` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `reference_no` VARCHAR(100) NOT NULL UNIQUE,
     `user_id` INT NOT NULL,
     `hostel_id` INT DEFAULT NULL,
+    `room_id` INT DEFAULT NULL,
+    `hostel_name_snapshot` VARCHAR(150) DEFAULT NULL,
+    `room_number_snapshot` VARCHAR(50) DEFAULT NULL,
     `title` VARCHAR(180) NOT NULL,
+    `category` ENUM('Plumbing', 'Electrical', 'Furniture', 'Cleaning', 'Room Facilities', 'Security', 'Other') NOT NULL DEFAULT 'Other',
     `description` TEXT NOT NULL,
     `priority` ENUM('low', 'medium', 'high') NOT NULL DEFAULT 'medium',
-    `status` ENUM('pending', 'in_progress', 'resolved') NOT NULL DEFAULT 'pending',
+    `status` ENUM('pending', 'in_progress', 'resolved', 'rejected') NOT NULL DEFAULT 'pending',
+    `latest_response` TEXT DEFAULT NULL,
+    `resolution_notes` TEXT DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`hostel_id`) REFERENCES `hostel_profiles`(`id`) ON DELETE SET NULL,
-    INDEX `idx_maintenance_hostel` (`hostel_id`, `status`)
+    FOREIGN KEY (`room_id`) REFERENCES `rooms`(`id`) ON DELETE SET NULL,
+    INDEX `idx_maintenance_hostel` (`hostel_id`, `status`),
+    INDEX `idx_maintenance_filters` (`status`, `category`, `hostel_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `maintenance_requests` (`id`, `user_id`, `hostel_id`, `title`, `description`, `priority`, `status`) VALUES
-(1, 3, 1, 'Study Light Bulb Flickering', 'Ceiling study light bulb flickering in Room A-104 study desk.', 'medium', 'in_progress'),
-(2, 3, 1, 'Water Basin Tap Inspection', 'Bathroom basin tap has a minor drip after closing.', 'low', 'pending')
+INSERT INTO `maintenance_requests` (`id`, `reference_no`, `user_id`, `hostel_id`, `room_id`, `hostel_name_snapshot`, `room_number_snapshot`, `title`, `category`, `description`, `priority`, `status`) VALUES
+(1, 'CIQ-SEED-0001', 3, 1, 4, 'Qwetu', 'A-104', 'Study Light Bulb Flickering', 'Electrical', 'Ceiling study light bulb flickering in Room A-104 study desk.', 'medium', 'in_progress'),
+(2, 'CIQ-SEED-0002', 3, 1, 1, 'Qwetu', 'A-101', 'Water Basin Tap Inspection', 'Plumbing', 'Bathroom basin tap has a minor drip after closing.', 'low', 'pending')
 ON DUPLICATE KEY UPDATE
     `status` = VALUES(`status`),
     `hostel_id` = VALUES(`hostel_id`);
+
+CREATE TABLE IF NOT EXISTS `maintenance_request_history` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `request_id` INT NOT NULL,
+    `actor_id` INT DEFAULT NULL,
+    `action` VARCHAR(40) NOT NULL,
+    `previous_status` ENUM('pending', 'in_progress', 'resolved', 'rejected') DEFAULT NULL,
+    `new_status` ENUM('pending', 'in_progress', 'resolved', 'rejected') DEFAULT NULL,
+    `response` TEXT DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_maintenance_history_request` (`request_id`, `created_at`),
+    INDEX `idx_maintenance_history_actor` (`actor_id`),
+    FOREIGN KEY (`request_id`) REFERENCES `maintenance_requests`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`actor_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------------------------------------
 -- 6. Payment Records Table (Tracks Accommodation Payment Records)
@@ -148,6 +177,7 @@ CREATE TABLE IF NOT EXISTS `payment_records` (
 CREATE TABLE IF NOT EXISTS `student_profiles` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `user_id` INT NOT NULL UNIQUE,
+    `full_name` VARCHAR(150) DEFAULT NULL,
     `student_number` VARCHAR(50) DEFAULT NULL UNIQUE,
     `phone` VARCHAR(30) DEFAULT NULL,
     `course` VARCHAR(150) DEFAULT NULL,

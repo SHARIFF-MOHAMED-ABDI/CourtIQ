@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Email address or username and password are required.';
         } else {
             // Query database securely using prepared statement
-            $stmt = db()->prepare('SELECT id, username, email, password_hash, role, status FROM users WHERE (username = ? OR email = ?) LIMIT 1');
+            $stmt = db()->prepare('SELECT id, username, email, password_hash, role, status, approval_status FROM users WHERE (username = ? OR email = ?) LIMIT 1');
 
             if ($stmt) {
                 $stmt->bind_param('ss', $usernameValue, $usernameValue);
@@ -42,12 +42,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->close();
 
                 if ($user && password_verify($password, $user['password_hash'])) {
-                    // Verify account active status
-                    if ($user['status'] !== 'active') {
+                    if ($user['approval_status'] === 'pending') {
+                        $errors[] = 'Your account is awaiting Administrator approval.';
+                    } elseif ($user['approval_status'] === 'rejected') {
+                        $errors[] = 'Your account registration was not approved. Please contact the hostel administration office.';
+                    } elseif ($user['status'] !== 'active') {
                         $errors[] = 'Your account is currently inactive or suspended. Please contact an authorized hostel administrator.';
                     } else {
                         // Valid credentials: initiate secure authenticated session
                         loginUser($user, $remember);
+                        $loginEvent = db()->prepare("INSERT INTO audit_log (user_id, action, entity_type) VALUES (?, 'login', 'session')");
+                        if ($loginEvent) {
+                            $loginUserId = (int)$user['id'];
+                            $loginEvent->bind_param('i', $loginUserId);
+                            if (!$loginEvent->execute()) {
+                                error_log('CourtIQ could not record a successful login event: ' . $loginEvent->error);
+                            }
+                            $loginEvent->close();
+                        } else {
+                            error_log('CourtIQ could not prepare a successful login event: ' . db()->error);
+                        }
 
                         // Redirect strictly based on database role
                         $targetDashboard = match (strtolower(trim($user['role']))) {
@@ -197,6 +211,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $alertMsg = 'Authentication required. Please sign in to access that page.';
                     } elseif ($errParam === 'unauthorized') {
                         $alertMsg = 'Access Denied: You do not possess the required permissions for that role.';
+                    } elseif ($errParam === 'approval_pending') {
+                        $alertMsg = 'Your account is awaiting Administrator approval.';
+                    } elseif ($errParam === 'approval_rejected') {
+                        $alertMsg = 'Your account registration was not approved. Please contact the hostel administration office.';
+                    } elseif ($errParam === 'account_inactive') {
+                        $alertMsg = 'Your account is inactive or suspended. Please contact an administrator.';
                     }
                     ?>
                     <div class="alert alert-warning" role="alert">
@@ -308,11 +328,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <span class="btn-text">Sign In to CourtIQ</span>
                         <span class="btn-spinner is-hidden" id="loginSpinner" aria-hidden="true"></span>
                     </button>
+                    <p class="form-subtitle"><a href="<?= projectUrl('register.php') ?>">New student? Create an account</a></p>
                 </form>
 
                 <div class="login-footer-notice">
                     <p>
-                        User accounts are managed by authorized administrators. Registration and password recovery are processed through the campus hostel administration office.
+                        Student accounts require Administrator approval before access is enabled.
                     </p>
                 </div>
             </div>

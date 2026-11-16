@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/maintenance.php';
 requireRole(['student']);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !verifyCsrfToken($_POST['csrf_token'] ?? null)) {
@@ -10,23 +11,62 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !verifyCsrfToken($_POST['csrf_token
 
 $userId = (int)currentUser()['id'];
 $action = (string)($_POST['action'] ?? '');
+$returnPage = match ($action) {
+    'application' => 'applications.php',
+    'maintenance' => 'maintenance.php',
+    default => 'index.php',
+};
 $conn = db();
 if ($action === 'profile_save') {
+    $fullName = trim((string)($_POST['full_name'] ?? ''));
     $email = trim((string)($_POST['email'] ?? ''));
     $studentNo = trim((string)($_POST['student_number'] ?? ''));
     $phone = trim((string)($_POST['phone'] ?? ''));
     $course = trim((string)($_POST['course'] ?? ''));
     $year = (int)($_POST['year_of_study'] ?? 0);
     $emergency = trim((string)($_POST['emergency_contact'] ?? ''));
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || ($year !== 0 && ($year < 1 || $year > 20))) { header('Location: profile.php?error=Invalid profile details'); exit; }
-    $conn->begin_transaction();
+    if ($fullName === '' || strlen($fullName) > 150 || !filter_var($email, FILTER_VALIDATE_EMAIL) || ($year !== 0 && ($year < 1 || $year > 20))) { header('Location: profile.php?error=Invalid profile details'); exit; }
+    if (!$conn->begin_transaction()) {
+        header('Location: profile.php?error=Unable to save profile');
+        exit;
+    }
     try {
-        $st=$conn->prepare('UPDATE users SET email=? WHERE id=?'); $st->bind_param('si',$email,$userId); $st->execute(); $st->close();
-        $st=$conn->prepare('INSERT INTO student_profiles(user_id,student_number,phone,course,year_of_study,emergency_contact) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE student_number=VALUES(student_number),phone=VALUES(phone),course=VALUES(course),year_of_study=VALUES(year_of_study),emergency_contact=VALUES(emergency_contact)');
-        $st->bind_param('isssis',$userId,$studentNo,$phone,$course,$year,$emergency); $st->execute(); $st->close(); $conn->commit(); header('Location: profile.php?success=1');
-    } catch(Throwable $e) { $conn->rollback(); header('Location: profile.php?error=Unable to save profile'); } exit;
+        $st = $conn->prepare('UPDATE users SET email = ? WHERE id = ?');
+        if (!$st) {
+            throw new RuntimeException('Unable to prepare profile update.');
+        }
+        $st->bind_param('si', $email, $userId);
+        if (!$st->execute()) {
+            throw new RuntimeException('Unable to update the profile email.');
+        }
+        $st->close();
+        $st = $conn->prepare('INSERT INTO student_profiles(user_id,full_name,student_number,phone,course,year_of_study,emergency_contact)
+            VALUES(?,?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE full_name=VALUES(full_name),student_number=VALUES(student_number),phone=VALUES(phone),
+                course=VALUES(course),year_of_study=VALUES(year_of_study),emergency_contact=VALUES(emergency_contact)');
+        if (!$st) {
+            throw new RuntimeException('Unable to prepare student profile update.');
+        }
+        $st->bind_param('issssis', $userId, $fullName, $studentNo, $phone, $course, $year, $emergency);
+        if (!$st->execute()) {
+            throw new RuntimeException('Unable to update student profile.');
+        }
+        $st->close();
+        if (!$conn->commit()) {
+            throw new RuntimeException('Unable to complete profile update.');
+        }
+        header('Location: profile.php?success=1');
+    } catch (Throwable $e) {
+        $conn->rollback();
+        error_log('CourtIQ student profile update failed: ' . $e->getMessage());
+        header('Location: profile.php?error=Unable to save profile');
+    }
+    exit;
 }
-$conn->begin_transaction();
+if (!$conn->begin_transaction()) {
+    http_response_code(503);
+    exit('Unable to start the requested operation.');
+}
 try {
     if ($action === 'application') {
         $hostel = trim((string)($_POST['hostel_preference'] ?? ''));
@@ -46,30 +86,77 @@ try {
         $notice->execute();
         $notice->close();
     } elseif ($action === 'maintenance') {
-        $title = trim((string)($_POST['title'] ?? ''));
+        $category = trim((string)($_POST['category'] ?? ''));
         $description = trim((string)($_POST['description'] ?? ''));
         $priority = (string)($_POST['priority'] ?? 'medium');
-        if ($title === '' || $description === '' || !in_array($priority, ['low', 'medium', 'high'], true)) {
-            throw new RuntimeException('Complete the maintenance form with a valid priority.');
+        $categories = ['Plumbing', 'Electrical', 'Furniture', 'Cleaning', 'Room Facilities', 'Security', 'Other'];
+        if (!in_array($category, $categories, true) || $description === '' || strlen($description) > 5000
+            || !in_array($priority, ['low', 'medium', 'high'], true)) {
+            throw new RuntimeException('Complete the maintenance form with a valid category, description, and priority.');
         }
-        $allocationStmt = $conn->prepare("SELECT r.hostel_id FROM room_allocations a JOIN rooms r ON r.id = a.room_id WHERE a.student_id = ? AND a.status = 'active' LIMIT 1");
+        $allocationStmt = $conn->prepare("SELECT r.id AS room_id, r.room_number, r.hostel_id, h.name AS hostel_name
+            FROM room_allocations a
+            JOIN rooms r ON r.id = a.room_id
+            JOIN hostel_profiles h ON h.id = r.hostel_id
+            WHERE a.student_id = ? AND a.status = 'active' LIMIT 1");
+        if (!$allocationStmt) {
+            throw new RuntimeException('Unable to prepare the room lookup.');
+        }
         $allocationStmt->bind_param('i', $userId);
-        $allocationStmt->execute();
+        if (!$allocationStmt->execute()) {
+            throw new RuntimeException('Unable to read the allocated room.');
+        }
         $allocation = $allocationStmt->get_result()->fetch_assoc();
         $allocationStmt->close();
         $hostelId = $allocation ? (int)$allocation['hostel_id'] : null;
+        $roomId = $allocation ? (int)$allocation['room_id'] : null;
+        $hostelName = $allocation ? (string)$allocation['hostel_name'] : null;
+        $roomNumber = $allocation ? (string)$allocation['room_number'] : null;
+        $referenceNo = 'CIQ-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(8)));
+        $title = $category . ' issue';
 
-        $stmt = $conn->prepare('INSERT INTO maintenance_requests (user_id, hostel_id, title, description, priority) VALUES (?, ?, ?, ?, ?)');
-        $stmt->bind_param('iisss', $userId, $hostelId, $title, $description, $priority);
-        $stmt->execute();
+        $stmt = $conn->prepare("INSERT INTO maintenance_requests
+            (reference_no, user_id, hostel_id, room_id, hostel_name_snapshot, room_number_snapshot,
+             title, category, description, priority, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')");
+        if (!$stmt) {
+            throw new RuntimeException('Unable to prepare the maintenance request.');
+        }
+        $stmt->bind_param(
+            'siiissssss',
+            $referenceNo,
+            $userId,
+            $hostelId,
+            $roomId,
+            $hostelName,
+            $roomNumber,
+            $title,
+            $category,
+            $description,
+            $priority
+        );
+        if (!$stmt->execute()) {
+            $error = $stmt->error;
+            $stmt->close();
+            error_log('CourtIQ maintenance request insert failed: ' . $error);
+            throw new RuntimeException('Unable to save the maintenance request.');
+        }
+        $requestId = (int)$stmt->insert_id;
         $stmt->close();
+        if ($requestId < 1) {
+            throw new RuntimeException('Unable to confirm the maintenance request.');
+        }
+        recordMaintenanceHistory($conn, $requestId, $userId, 'submitted', null, 'pending');
     } else {
         throw new RuntimeException('Unknown operation.');
     }
-    $conn->commit();
-    header('Location: index.php?success=1');
+    if (!$conn->commit()) {
+        throw new RuntimeException('Unable to save the request. Please try again.');
+    }
+    header('Location: ' . $returnPage . '?success=1');
 } catch (Throwable $e) {
     $conn->rollback();
-    header('Location: index.php?error=' . rawurlencode($e->getMessage()));
+    error_log('CourtIQ student action failed: ' . $e->getMessage());
+    header('Location: ' . $returnPage . '?error=' . rawurlencode($e->getMessage()));
 }
 exit();

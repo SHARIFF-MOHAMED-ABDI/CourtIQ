@@ -1,274 +1,155 @@
 <?php
-/**
- * CourtIQ: A Web-Based Hostel Management System
- * Student Resident Dashboard
- * Corresponds to Specification Figure 20 (Student Navigation Wireframe)
- */
-
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/db.php';
-
-// Enforce strict role-based access control
+require_once __DIR__ . '/../includes/dashboard_charts.php';
 requireRole(['student']);
 
 $user = currentUser();
-$pageTitle = 'Student Portal | CourtIQ';
-
-// Retrieve student application and maintenance data
 $userId = (int)$user['id'];
-
-// 1. Accommodation Application status
-$appStmt = db()->prepare('SELECT hostel_preference, room_type, application_status, notes FROM accommodation_applications WHERE user_id = ? ORDER BY id DESC LIMIT 1');
-$appStmt->bind_param('i', $userId);
-$appStmt->execute();
-$application = $appStmt->get_result()->fetch_assoc();
-$appStmt->close();
-
-// 2. Payment Records summary
-$payStmt = db()->prepare('SELECT reference_no, amount, balance, status, payment_date FROM payment_records WHERE user_id = ? ORDER BY id DESC LIMIT 1');
-$payStmt->bind_param('i', $userId);
-$payStmt->execute();
-$payment = $payStmt->get_result()->fetch_assoc();
-$payStmt->close();
-
-// 3. Maintenance Requests
-$maintStmt = db()->prepare('SELECT title, priority, status, created_at FROM maintenance_requests WHERE user_id = ? ORDER BY id DESC LIMIT 5');
-$maintStmt->bind_param('i', $userId);
-$maintStmt->execute();
-$maintenanceList = $maintStmt->get_result()->fetch_all(MYSQLI_ASSOC);
-$maintStmt->close();
-
-$allocationStmt = db()->prepare("SELECT r.id AS room_id, r.hostel_id, r.room_number, r.room_type, h.name AS hostel_name, a.allocated_at
-    FROM room_allocations a JOIN rooms r ON r.id = a.room_id JOIN hostel_profiles h ON h.id = r.hostel_id
+$conn = db();
+$applicationStmt = $conn->prepare('SELECT hostel_preference, room_type, application_status FROM accommodation_applications WHERE user_id = ? ORDER BY id DESC LIMIT 1');
+$applicationStmt->bind_param('i', $userId);
+$applicationStmt->execute();
+$application = $applicationStmt->get_result()->fetch_assoc();
+$applicationStmt->close();
+$allocationStmt = $conn->prepare("SELECT r.room_number, r.room_type, h.name AS hostel_name FROM room_allocations a
+    JOIN rooms r ON r.id = a.room_id JOIN hostel_profiles h ON h.id = r.hostel_id
     WHERE a.student_id = ? AND a.status = 'active' LIMIT 1");
 $allocationStmt->bind_param('i', $userId);
 $allocationStmt->execute();
 $allocation = $allocationStmt->get_result()->fetch_assoc();
 $allocationStmt->close();
+$paymentStmt = $conn->prepare('SELECT reference_no, amount, balance, payment_date FROM payment_records WHERE user_id = ? ORDER BY payment_date DESC, id DESC LIMIT 1');
+$paymentStmt->bind_param('i', $userId);
+$paymentStmt->execute();
+$payment = $paymentStmt->get_result()->fetch_assoc();
+$paymentStmt->close();
+$statsStmt = $conn->prepare("SELECT COUNT(*) AS tickets,
+    COALESCE(SUM(status = 'pending'), 0) AS pending_tickets,
+    COALESCE(SUM(status = 'in_progress'), 0) AS in_progress_tickets,
+    COALESCE(SUM(status = 'resolved'), 0) AS resolved_tickets
+    FROM maintenance_requests WHERE user_id = ?");
+$statsStmt->bind_param('i', $userId);
+$statsStmt->execute();
+$stats = $statsStmt->get_result()->fetch_assoc();
+$statsStmt->close();
+$latestMaintenanceStmt = $conn->prepare("SELECT reference_no, title, category, priority, status, latest_response,
+        resolution_notes, created_at
+    FROM maintenance_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 5");
+$latestMaintenanceStmt->bind_param('i', $userId);
+$latestMaintenanceStmt->execute();
+$latestMaintenance = $latestMaintenanceStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$latestMaintenanceStmt->close();
+$paidMonthsStmt = $conn->prepare("SELECT COUNT(DISTINCT DATE_FORMAT(payment_date, '%Y-%m')) AS paid_months FROM payment_records WHERE user_id = ?");
+$paidMonthsStmt->bind_param('i', $userId);
+$paidMonthsStmt->execute();
+$paidMonths = $paidMonthsStmt->get_result()->fetch_assoc();
+$paidMonthsStmt->close();
 
-$applicationScore = $application && in_array(strtolower($application['application_status']), ['approved', 'allocated'], true) ? 92 : ($application ? 68 : 35);
-$paymentScore = $payment ? 84 : 30;
-$maintenanceScore = empty($maintenanceList) ? 96 : max(55, 96 - (count($maintenanceList) * 8));
+$studentCharts = getStudentDashboardChartData($conn, $userId);
+$studentChart = renderLineChart(
+    $studentCharts['student-activity']['title'],
+    $studentCharts['student-activity']['labels'],
+    $studentCharts['student-activity']['series']
+);
 ?>
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($pageTitle) ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Student dashboard | CourtIQ</title>
     <link rel="stylesheet" href="<?= projectUrl('assets/css/style.css') ?>">
 </head>
-<body class="dashboard-layout">
-    <!-- Top Dashboard Header -->
-    <header class="dashboard-nav-bar">
-        <div class="container dashboard-nav-inner">
-            <a href="<?= projectUrl('index.php') ?>" class="brand" aria-label="CourtIQ Home">
-                <span class="brand-icon-box">
-                    <svg class="brand-svg" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                        <rect width="32" height="32" rx="8" fill="#102A43"/>
-                        <path d="M16 6L7 13V25C7 25.5523 7.44772 26 8 26H13V19H19V26H24C24.5523 26 25 25.5523 25 25V13L16 6Z" fill="#2563EB"/>
-                        <path d="M16 11L11 15V23H13V18C13 17.4477 13.4477 17 14 17H18C18.5523 17 19 17.4477 19 18V23H21V15L16 11Z" fill="#0D9488"/>
-                    </svg>
-                </span>
-                <span class="brand-text">Court<span>IQ</span></span>
-            </a>
-
-            <div class="user-badge-wrap">
-                <div class="user-profile-pill">
-                    <span class="role-tag-badge badge-student">Student</span>
-                    <span><?= e($user['username']) ?></span>
-                </div>
-                <a href="<?= projectUrl('logout.php') ?>" class="btn btn-secondary btn-sm" title="End authenticated session">
-                    <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd"/>
-                    </svg>
-                    Logout
-                </a>
-                <a href="profile.php" class="btn btn-secondary btn-sm">My profile</a>
-            </div>
-        </div>
-    </header>
-
-    <!-- Student Dashboard Main Content -->
-    <main class="dashboard-content-main container">
-        <!-- Welcome Banner -->
-        <div class="dashboard-banner">
+<body class="dashboard-layout role-dashboard" data-maintenance-endpoint="<?= e(projectUrl('student/maintenance-updates.php')) ?>" data-dashboard-chart-endpoint="<?= e(projectUrl('student/maintenance-updates.php')) ?>">
+    <?php require __DIR__ . '/partials/nav.php'; ?>
+    <main class="dashboard-content-main container dashboard-overview">
+        <section class="dashboard-banner">
             <div>
-                <span class="dash-welcome-eyebrow">Student Accommodation Services</span>
-                <h1 class="dash-welcome-title">Welcome, <?= e($user['username']) ?>.</h1>
-                <p class="dash-welcome-sub">
-                    Manage your accommodation profile, track application reviews, inspect rent ledger records, and log maintenance tickets.
-                </p>
+                <span class="dash-welcome-eyebrow">STUDENT PORTAL</span>
+                <h1 class="dash-welcome-title">Welcome, <?= e($user['full_name'] ?: $user['username']) ?>.</h1>
+                <p class="dash-welcome-sub">Your accommodation, payment, and service-request overview.</p>
             </div>
-            <div>
-                <span class="live-status-pill">
-                    <span class="pulse-dot"></span>
-                    Account Active &bull; Verified
-                </span>
-            </div>
-        </div>
+            <span class="live-status-pill"><i class="pulse-dot"></i> Account active · Approval status: <?= e(ucfirst($user['approval_status'] ?? 'approved')) ?></span>
+        </section>
+        <nav class="dashboard-section-tabs" role="tablist" aria-label="Student dashboard sections">
+            <button type="button" id="student-tab-overview" role="tab" aria-controls="student-overview" aria-selected="true">Overview</button>
+            <button type="button" id="student-tab-applications" role="tab" aria-controls="student-applications" aria-selected="false" tabindex="-1">Applications</button>
+            <button type="button" id="student-tab-payments" role="tab" aria-controls="student-payments" aria-selected="false" tabindex="-1">Payments</button>
+            <button type="button" id="student-tab-maintenance" role="tab" aria-controls="student-maintenance" aria-selected="false" tabindex="-1">Maintenance</button>
+            <button type="button" id="student-tab-profile" role="tab" aria-controls="student-profile" aria-selected="false" tabindex="-1">Profile</button>
+        </nav>
 
-        <!-- Metric Summary Cards -->
-        <div class="dashboard-cards-grid">
-            <!-- Accommodation Application -->
-            <div class="dash-metric-card">
-                <div class="dash-card-header">
-                    <span class="dash-card-title">Accommodation Status</span>
-                    <span class="vcard-status">
-                        <?= $application ? ucfirst($application['application_status']) : 'No Application' ?>
-                    </span>
-                </div>
-                <div class="dash-card-val">
-                    <?= $application ? e($application['hostel_preference']) : 'Not Assigned' ?>
-                </div>
-                <p class="dash-card-desc">
-                    <?= $application ? 'Room Type: ' . e($application['room_type']) : 'Submit application through hostel office.' ?>
-                </p>
+        <section id="student-overview" class="dashboard-tab-panel" role="tabpanel" aria-labelledby="student-tab-overview">
+            <div class="dashboard-cards-grid" aria-label="Student summary">
+                <article class="dash-metric-card"><div class="dash-card-header"><span class="dash-card-title">Application</span><span class="demo-tag"><?= $application ? e(ucfirst($application['application_status'])) : 'NONE' ?></span></div><div class="dash-card-val"><?= $application ? e($application['hostel_preference']) : 'Not submitted' ?></div><p class="dash-card-desc"><?= $application ? e($application['room_type']) : 'Submit an accommodation application.' ?></p></article>
+                <article class="dash-metric-card"><div class="dash-card-header"><span class="dash-card-title">Assigned room</span><span class="vcard-status"><?= $allocation ? 'Allocated' : 'Pending' ?></span></div><div class="dash-card-val"><?= $allocation ? e($allocation['room_number']) : 'Not allocated' ?></div><p class="dash-card-desc"><?= $allocation ? e($allocation['hostel_name']) . ' · ' . e($allocation['room_type']) : 'Your room assignment will appear here.' ?></p></article>
+                <article class="dash-metric-card"><div class="dash-card-header"><span class="dash-card-title">Latest payment</span><span class="demo-tag"><?= $payment ? e(date('M Y', strtotime($payment['payment_date']))) : 'NONE' ?></span></div><div class="dash-card-val"><?= $payment ? 'KES ' . number_format((float)$payment['amount'], 2) : 'KES 0.00' ?></div><p class="dash-card-desc"><?= $payment ? 'Balance: KES ' . number_format((float)$payment['balance'], 2) : 'No payment recorded yet.' ?></p></article>
             </div>
-
-            <!-- Room Allocation -->
-            <div class="dash-metric-card">
-                <div class="dash-card-header">
-                    <span class="dash-card-title">Assigned Room</span>
-                    <span class="counter-badge">Allocated</span>
-                </div>
-                <div class="dash-card-val"><?= $allocation ? 'Room ' . e($allocation['room_number']) : 'Not Allocated' ?></div>
-                <p class="dash-card-desc"><?= $allocation ? e($allocation['hostel_name']) . ' &bull; ' . e($allocation['room_type']) : 'Awaiting warden allocation' ?></p>
-            </div>
-
-            <!-- Recorded Rent Records -->
-            <div class="dash-metric-card">
-                <div class="dash-card-header">
-                    <span class="dash-card-title">Rent Ledger Record</span>
-                    <span class="demo-tag">RECORDED</span>
-                </div>
-                <div class="dash-card-val">
-                    <?= $payment ? 'KES ' . number_format($payment['amount'], 2) : 'KES 0.00' ?>
-                </div>
-                <p class="dash-card-desc">
-                    <?= $payment ? 'Balance: KES ' . number_format($payment['balance'], 2) . ' (' . e($payment['reference_no']) . ')' : 'No payment records on file.' ?>
-                </p>
-            </div>
-        </div>
-
-        <div class="dashboard-visual-grid">
-            <section class="visual-card" aria-labelledby="student-rating-title">
-                <h2 id="student-rating-title">Student experience indicators</h2>
-                <div class="rating-row">
-                    <span>High rating</span>
-                    <div class="rating-track"><div class="rating-fill" style="--rating: <?= $applicationScore >= 85 ? $applicationScore : 18 ?>%; --rating-color: var(--color-teal);"></div></div>
-                    <strong><?= $applicationScore >= 85 ? $applicationScore : 18 ?>%</strong>
-                </div>
-                <div class="rating-row">
-                    <span>Above average</span>
-                    <div class="rating-track"><div class="rating-fill" style="--rating: <?= $paymentScore ?>%;"></div></div>
-                    <strong><?= $paymentScore ?>%</strong>
-                </div>
-                <div class="rating-row">
-                    <span>Middle</span>
-                    <div class="rating-track"><div class="rating-fill" style="--rating: 58%; --rating-color: var(--color-gold);"></div></div>
-                    <strong>58%</strong>
-                </div>
-                <div class="rating-row">
-                    <span>Low rating</span>
-                    <div class="rating-track"><div class="rating-fill" style="--rating: <?= 100 - $maintenanceScore ?>%; --rating-color: var(--status-danger);"></div></div>
-                    <strong><?= 100 - $maintenanceScore ?>%</strong>
-                </div>
+            <section class="visual-card line-chart-card">
+                <h2>Activity over the last six months</h2>
+                <p class="line-chart-subtitle"><?= (int)$stats['tickets'] ?> issues raised · <?= (int)$paidMonths['paid_months'] ?> months with payments recorded overall.</p>
+                <div data-dashboard-chart="student-activity"><?= $studentChart ?></div>
+                <p class="line-chart-subtitle" data-dashboard-refresh-status aria-live="polite">Live chart refreshes automatically.</p>
             </section>
+        </section>
 
-            <section class="visual-card" aria-labelledby="student-activity-title">
-                <h2 id="student-activity-title">Monthly activity</h2>
-                <div class="activity-list">
-                    <div class="activity-item">
-                        <div><strong>Accommodation application</strong><span><?= $application ? ucfirst(e($application['application_status'])) : 'Not submitted' ?></span></div>
-                        <span><?= $application ? 'This term' : 'Pending' ?></span>
-                    </div>
-                    <div class="activity-item">
-                        <div><strong>Rent ledger update</strong><span><?= $payment ? e($payment['reference_no']) : 'No record' ?></span></div>
-                        <span><?= $payment ? date('M d, Y', strtotime($payment['payment_date'])) : 'Pending' ?></span>
-                    </div>
-                    <div class="activity-item">
-                        <div><strong>Maintenance requests</strong><span><?= count($maintenanceList) ?> recent ticket(s)</span></div>
-                        <span><?= date('M Y') ?></span>
-                    </div>
+        <section id="student-applications" class="dashboard-tab-panel" role="tabpanel" aria-labelledby="student-tab-applications" hidden>
+            <div class="admin-panel-header"><div><span class="admin-eyebrow">APPLICATIONS</span><h2>Accommodation application</h2></div></div>
+            <?php if ($application): ?>
+                <div class="admin-mini-grid">
+                    <article class="admin-mini-card"><small>Status</small><strong><?= e(ucfirst($application['application_status'])) ?></strong><span>Current application progress</span></article>
+                    <article class="admin-mini-card"><small>Hostel preference</small><strong><?= e($application['hostel_preference']) ?></strong><span>Requested accommodation</span></article>
+                    <article class="admin-mini-card"><small>Room type</small><strong><?= e($application['room_type']) ?></strong><span>Requested room type</span></article>
                 </div>
-            </section>
-        </div>
-
-        <?php if (!empty($_GET['success'])): ?><p class="vcard-status">Request submitted successfully.</p><?php endif; ?>
-        <?php if (!empty($_GET['error'])): ?><p class="counter-badge"><?= e($_GET['error']) ?></p><?php endif; ?>
-        <div class="dashboard-visual-grid">
-            <section class="visual-card">
-                <h2>Submit accommodation application</h2>
-                <form method="post" action="actions.php">
-                    <?= csrfField() ?><input type="hidden" name="action" value="application">
-                    <p><label>Hostel preference<br><input name="hostel_preference" required maxlength="150"></label></p>
-                    <p><label>Room type<br><input name="room_type" required maxlength="60"></label></p>
-                    <p><label>Notes<br><textarea name="notes" rows="2"></textarea></label></p>
-                    <button class="btn btn-primary btn-sm" type="submit">Submit application</button>
-                </form>
-            </section>
-            <section class="visual-card">
-                <h2>Report maintenance issue</h2>
-                <form method="post" action="actions.php">
-                    <?= csrfField() ?><input type="hidden" name="action" value="maintenance">
-                    <p><label>Title<br><input name="title" required maxlength="180"></label></p>
-                    <p><label>Description<br><textarea name="description" rows="2" required></textarea></label></p>
-                    <p><label>Priority<br><select name="priority"><option>low</option><option selected>medium</option><option>high</option></select></label></p>
-                    <button class="btn btn-primary btn-sm" type="submit">Create request</button>
-                </form>
-            </section>
-        </div>
-
-        <!-- Student Navigation Wireframe Sections (Modules) -->
-        <div class="dashboard-panel-full">
-            <div class="dash-panel-heading">
-                <span>Active Maintenance Tickets</span>
-                <span class="demo-tag"><?= count($maintenanceList) ?> Recorded</span>
-            </div>
-
-            <?php if (!empty($maintenanceList)): ?>
-                <table class="dash-table">
-                    <thead>
-                        <tr>
-                            <th>Issue Title</th>
-                            <th>Priority</th>
-                            <th>Status</th>
-                            <th>Date Reported</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($maintenanceList as $m): ?>
-                            <tr>
-                                <td><strong><?= e($m['title']) ?></strong></td>
-                                <td>
-                                    <span class="demo-tag"><?= strtoupper(e($m['priority'])) ?></span>
-                                </td>
-                                <td>
-                                    <span class="vcard-status"><?= ucfirst(str_replace('_', ' ', $m['status'])) ?></span>
-                                </td>
-                                <td><?= date('M d, Y', strtotime($m['created_at'])) ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
             <?php else: ?>
-                <p class="dash-card-desc">No maintenance requests currently open.</p>
+                <p class="dash-card-desc">You have not submitted an accommodation application.</p>
             <?php endif; ?>
-        </div>
+            <p class="dashboard-tab-action"><a class="btn btn-primary btn-sm" href="applications.php">Open applications</a></p>
+        </section>
 
-        <!-- Wireframe Navigation Notice -->
-        <div class="contact-panel-card" style="text-align: left;">
-            <h3 style="font-size: 1.1rem; color: var(--color-primary); margin-bottom: 6px;">
-                Student Navigation Wireframe Reference (Figure 20)
-            </h3>
-            <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;">
-                This portal implements the core student accommodation functions defined in Chapter 5: Personal Profile, Accommodation Applications, Room Allocation Status, Payment Record Reviews, and Maintenance Reporting. Detailed transaction and request sub-modules are linked to your verified student account ID (<?= e($user['id']) ?>).
-            </p>
-        </div>
+        <section id="student-payments" class="dashboard-tab-panel" role="tabpanel" aria-labelledby="student-tab-payments" hidden>
+            <div class="admin-panel-header"><div><span class="admin-eyebrow">PAYMENTS</span><h2>Latest payment summary</h2></div></div>
+            <div class="admin-mini-grid">
+                <article class="admin-mini-card"><small>Payments recorded</small><strong><?= (int)$paidMonths['paid_months'] ?> months</strong><span>Months with a payment record</span></article>
+                <article class="admin-mini-card"><small>Latest amount</small><strong><?= $payment ? 'KES ' . number_format((float)$payment['amount'], 2) : 'KES 0.00' ?></strong><span><?= $payment ? e($payment['reference_no']) : 'No payment recorded' ?></span></article>
+                <article class="admin-mini-card"><small>Outstanding balance</small><strong><?= $payment ? 'KES ' . number_format((float)$payment['balance'], 2) : 'KES 0.00' ?></strong><span><?= $payment ? date('M j, Y', strtotime($payment['payment_date'])) : 'No recent payment' ?></span></article>
+            </div>
+            <p class="dashboard-tab-action"><a class="btn btn-primary btn-sm" href="payments.php">Open payment history</a></p>
+        </section>
+
+        <section id="student-maintenance" class="dashboard-tab-panel" role="tabpanel" aria-labelledby="student-tab-maintenance" hidden>
+            <div class="admin-panel-header"><div><span class="admin-eyebrow">MAINTENANCE</span><h2>Your service requests</h2></div></div>
+            <div class="admin-mini-grid">
+                <article class="admin-mini-card"><small>Total issues</small><strong data-maintenance-count="total"><?= (int)$stats['tickets'] ?></strong><span>Requests submitted</span></article>
+                <article class="admin-mini-card"><small>Pending</small><strong data-maintenance-count="pending"><?= (int)$stats['pending_tickets'] ?></strong><span>Awaiting review</span></article>
+                <article class="admin-mini-card"><small>In progress</small><strong data-maintenance-count="in_progress"><?= (int)$stats['in_progress_tickets'] ?></strong><span>Being handled</span></article>
+                <article class="admin-mini-card"><small>Resolved issues</small><strong data-maintenance-count="resolved"><?= (int)$stats['resolved_tickets'] ?></strong><span>Marked resolved</span></article>
+            </div>
+            <div class="activity-list" data-maintenance-list data-maintenance-limit="5">
+                <?php foreach ($latestMaintenance as $request): ?>
+                    <article class="activity-item"><div>
+                        <strong><?= e($request['reference_no']) ?> · <?= e($request['category']) ?></strong>
+                        <span><?= e($request['title']) ?> · <?= e(date('M j, Y H:i', strtotime($request['created_at']))) ?></span>
+                        <?php if ($request['latest_response']): ?><p><?= e($request['latest_response']) ?></p><?php endif; ?>
+                    </div><span class="status-pill status-<?= e($request['status']) ?>"><?= e(str_replace('_', ' ', ucfirst($request['status']))) ?></span></article>
+                <?php endforeach; ?>
+                <?php if (!$latestMaintenance): ?><p class="dash-card-desc">No maintenance requests yet.</p><?php endif; ?>
+            </div>
+            <p aria-live="polite" data-maintenance-refresh-status>Updates automatically every 20 seconds.</p>
+            <p class="dashboard-tab-action"><a class="btn btn-primary btn-sm" href="maintenance.php">Open maintenance requests</a></p>
+        </section>
+
+        <section id="student-profile" class="dashboard-tab-panel" role="tabpanel" aria-labelledby="student-tab-profile" hidden>
+            <div class="admin-panel-header"><div><span class="admin-eyebrow">PROFILE</span><h2>Account details</h2></div></div>
+            <div class="admin-mini-grid">
+                <article class="admin-mini-card"><small>Username</small><strong><?= e($user['username']) ?></strong><span>Student account</span></article>
+                <article class="admin-mini-card"><small>Email</small><strong><?= e($user['email']) ?></strong><span>Contact address</span></article>
+            </div>
+            <p class="dashboard-tab-action"><a class="btn btn-primary btn-sm" href="profile.php">Open profile settings</a></p>
+        </section>
     </main>
+    <script src="<?= projectUrl('assets/js/admin-dashboard.js') ?>" defer></script>
+    <script src="<?= projectUrl('assets/js/maintenance-updates.js') ?>" defer></script>
 </body>
 </html>
