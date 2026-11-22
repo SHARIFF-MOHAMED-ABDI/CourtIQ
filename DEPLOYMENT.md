@@ -35,3 +35,15 @@ Open the public domain in a browser and confirm the landing page loads. Test log
 - Do not share cPanel or database passwords in chat.
 - Keep HTTPS enabled.
 - Remove or disable demo credentials before production use.
+
+## Render Deployment
+
+CourtIQ is a PHP application. In Render, create or update the service as a **Web Service** with **Docker** as its language/runtime. The root-level `Dockerfile` installs the PHP MySQLi extension, enables Apache rewrite rules, and starts Apache.
+
+- **Dockerfile Path:** `./Dockerfile`
+- **Build Command:** leave blank; Render builds the Dockerfile.
+- **Start Command / Docker Command:** leave blank; the PHP Apache image starts Apache by default.
+- **Environment variable:** set `PORT` to `80` to match the Apache listener.
+- Set `COURTIQ_DB_HOST`, `COURTIQ_DB_USER`, `COURTIQ_DB_PASSWORD`, `COURTIQ_DB_NAME`, and `COURTIQ_DB_PORT` to the values for an externally hosted MySQL database. Do not use `127.0.0.1` unless MySQL runs in the same container.
+
+Do not use `yarn` or `yarn start`; this repository has no Node.js package manifest.
