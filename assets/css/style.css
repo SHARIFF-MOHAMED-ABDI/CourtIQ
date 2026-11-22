@@ -962,6 +962,11 @@ button, input, select, textarea {
     cursor: not-allowed;
 }
 
+.room-card.is-selected {
+    border-color: var(--color-secondary) !important;
+    box-shadow: 0 0 0 2px var(--color-secondary) !important;
+}
+
 /* ==========================================================
    12. Empty States
    ========================================================== */
