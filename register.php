@@ -10,6 +10,7 @@ if (isLoggedIn()) {
 $errors = [];
 $registration = ['full_name' => '', 'registration_number' => '', 'email' => ''];
 $registered = isset($_GET['registered']) && $_GET['registered'] === '1';
+$firstAdmin = isset($_GET['first_admin']) && $_GET['first_admin'] === '1';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
@@ -42,59 +43,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $conn = db();
         $conn->begin_transaction();
         try {
+            // Check if this is the first user (no admin exists)
+            $checkStmt = $conn->prepare("SELECT COUNT(*) as cnt FROM users WHERE role = 'administrator'");
+            $checkStmt->execute();
+            $result = $checkStmt->get_result()->fetch_assoc();
+            $checkStmt->close();
+            $isFirstAdmin = (int)$result['cnt'] === 0;
+
             $username = $registration['registration_number'];
             $passwordHash = password_hash($password, PASSWORD_DEFAULT);
             if ($passwordHash === false) {
                 throw new RuntimeException('Unable to secure the password.');
             }
 
+            $role = $isFirstAdmin ? 'administrator' : 'student';
+            $approvalStatus = $isFirstAdmin ? 'approved' : 'pending';
+
             $userStmt = $conn->prepare(
                 "INSERT INTO users (username, email, password_hash, role, status, approval_status)
-                 VALUES (?, ?, ?, 'student', 'active', 'pending')"
+                 VALUES (?, ?, ?, ?, 'active', ?)"
             );
             if (!$userStmt) {
                 throw new RuntimeException('Unable to prepare account registration.');
             }
-            $userStmt->bind_param('sss', $username, $registration['email'], $passwordHash);
+            $userStmt->bind_param('ssss', $username, $registration['email'], $passwordHash, $role, $approvalStatus);
             if (!$userStmt->execute()) {
                 $errorCode = $userStmt->errno;
                 $userStmt->close();
                 if ($errorCode === 1062) {
                     throw new DomainException('That registration number or email address is already registered.');
                 }
-                throw new RuntimeException('Unable to save the student account.');
+                throw new RuntimeException('Unable to save the account.');
             }
             $userId = (int)$userStmt->insert_id;
             $userStmt->close();
 
-            $profileStmt = $conn->prepare(
-                'INSERT INTO student_profiles (user_id, full_name, student_number) VALUES (?, ?, ?)'
-            );
-            if (!$profileStmt) {
-                throw new RuntimeException('Unable to prepare the student profile.');
-            }
-            $profileStmt->bind_param('iss', $userId, $registration['full_name'], $registration['registration_number']);
-            if (!$profileStmt->execute()) {
-                $errorCode = $profileStmt->errno;
-                $profileStmt->close();
-                if ($errorCode === 1062) {
-                    throw new DomainException('That registration number is already registered.');
+            if ($role === 'student') {
+                $profileStmt = $conn->prepare(
+                    'INSERT INTO student_profiles (user_id, full_name, student_number) VALUES (?, ?, ?)'
+                );
+                if (!$profileStmt) {
+                    throw new RuntimeException('Unable to prepare the student profile.');
                 }
-                throw new RuntimeException('Unable to save the student profile.');
+                $profileStmt->bind_param('iss', $userId, $registration['full_name'], $registration['registration_number']);
+                if (!$profileStmt->execute()) {
+                    $errorCode = $profileStmt->errno;
+                    $profileStmt->close();
+                    if ($errorCode === 1062) {
+                        throw new DomainException('That registration number is already registered.');
+                    }
+                    throw new RuntimeException('Unable to save the student profile.');
+                }
+                $profileStmt->close();
             }
-            $profileStmt->close();
 
             if (!$conn->commit()) {
-                throw new RuntimeException('Unable to complete student registration.');
+                throw new RuntimeException('Unable to complete registration.');
             }
-            header('Location: ' . projectUrl('register.php?registered=1'));
+            header('Location: ' . projectUrl('login.php?registered=1&first_admin=' . ($isFirstAdmin ? '1' : '0')));
             exit;
         } catch (Throwable $e) {
             $conn->rollback();
             if ($e instanceof DomainException) {
                 $errors[] = $e->getMessage();
+            } elseif ($e instanceof PDOException && $e->getCode() === '23505') {
+                $errors[] = 'That registration number or email address is already registered.';
             } else {
-                error_log('CourtIQ student registration failed: ' . $e->getMessage());
+                error_log('CourtIQ registration failed: ' . $e->getMessage());
                 $errors[] = 'Registration could not be completed. Please try again.';
             }
         }
@@ -116,12 +131,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <a class="brand" href="<?= projectUrl('index.php') ?>"><span class="brand-text">Court<span>IQ</span></span></a>
                 <span class="form-tag">Student Portal</span>
                 <h1 class="form-title">Create a student account</h1>
-                <p class="form-subtitle">Your account will be reviewed by an administrator before access is enabled.</p>
+                <p class="form-subtitle">Your account will be reviewed by an administrator before access is enabled. <strong>Note:</strong> The first registered account becomes the Administrator automatically.</p>
             </header>
 
             <?php if ($registered): ?>
                 <div class="alert alert-success" role="status">
-                    Registration received. Your account is awaiting Administrator approval. You can sign in after it is approved.
+                    <?php if ($firstAdmin): ?>
+                        Administrator account created successfully. You can now <a href="<?= projectUrl('login.php') ?>" class="alert-link">sign in</a> as administrator.
+                    <?php else: ?>
+                        Registration received. Your account is awaiting Administrator approval. You can sign in after it is approved.
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
             <?php if ($errors): ?>
