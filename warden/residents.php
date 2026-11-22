@@ -4,13 +4,14 @@ require_once __DIR__ . '/../includes/db.php';
 requireRole(['warden']);
 require __DIR__ . '/partials/scope.php';
 $studentSearch = trim((string)($_GET['student_q'] ?? ''));
+$searchPattern = '%' . $studentSearch . '%';
 $studentStmt = db()->prepare("SELECT u.id, u.username FROM users u
     JOIN room_allocations ra ON ra.student_id = u.id AND ra.status = 'active'
     JOIN rooms r ON r.id = ra.room_id
     WHERE u.role = 'student' AND u.status = 'active' AND u.approval_status = 'approved'
-    AND (u.username ILIKE CONCAT('%', ?, '%') OR u.email ILIKE CONCAT('%', ?, '%'))" . $studentClause . "
+    AND (u.username ILIKE ? OR u.email ILIKE ?)" . $studentClause . "
     GROUP BY u.id, u.username ORDER BY u.username");
-$studentStmt->bind_param('ss', $studentSearch, $studentSearch);
+$studentStmt->bind_param('ss', $searchPattern, $searchPattern);
 $studentStmt->execute();
 $students = $studentStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $studentStmt->close();

@@ -10,8 +10,9 @@ if (!in_array($approvalFilter, ['all', 'pending', 'approved', 'rejected'], true)
 $conn = db();
 $hostelId = max(0, (int)($_GET['hostel_id'] ?? 0));
 $hostelError = '';
-$stmt = $conn->prepare("SELECT id, username, email, role, status FROM users WHERE username ILIKE CONCAT('%', ?, '%') OR email ILIKE CONCAT('%', ?, '%') ORDER BY username");
-$stmt->bind_param('ss', $q, $q); $stmt->execute(); $users = $stmt->get_result()->fetch_all(MYSQLI_ASSOC); $stmt->close();
+$searchPattern = '%' . $q . '%';
+$stmt = $conn->prepare("SELECT id, username, email, role, status FROM users WHERE username ILIKE ? OR email ILIKE ? ORDER BY username");
+$stmt->bind_param('ss', $searchPattern, $searchPattern); $stmt->execute(); $users = $stmt->get_result()->fetch_all(MYSQLI_ASSOC); $stmt->close();
 $approvalStmt = $conn->prepare("SELECT u.id, u.email, u.approval_status, u.created_at, u.approval_decided_at,
         sp.full_name, sp.student_number, reviewer.username AS decided_by
     FROM users u

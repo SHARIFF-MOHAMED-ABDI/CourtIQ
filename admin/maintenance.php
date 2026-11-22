@@ -18,6 +18,7 @@ if (!in_array($categoryFilter, $categories, true)) {
 }
 $hostels = $conn->query('SELECT id, name FROM hostel_profiles ORDER BY name')->fetch_all(MYSQLI_ASSOC);
 
+$searchPattern = '%' . $search . '%';
 $stmt = $conn->prepare("SELECT m.id, m.reference_no, m.title, m.category, m.description, m.priority,
         m.status, m.latest_response, m.resolution_notes, m.created_at,
         m.hostel_id, COALESCE(m.hostel_name_snapshot, h.name) AS hostel_display,
@@ -31,8 +32,8 @@ $stmt = $conn->prepare("SELECT m.id, m.reference_no, m.title, m.category, m.desc
     WHERE (? = '' OR m.status = ?)
       AND (? = '' OR m.category = ?)
       AND (? = 0 OR m.hostel_id = ?)
-      AND (? = '' OR COALESCE(sp.full_name, u.username) ILIKE CONCAT('%', ?, '%')
-           OR m.reference_no ILIKE CONCAT('%', ?, '%'))
+      AND (? = '' OR COALESCE(sp.full_name, u.username) ILIKE ?
+            OR m.reference_no ILIKE ?)
     ORDER BY CASE m.status WHEN 'pending' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'resolved' THEN 3 WHEN 'rejected' THEN 4 ELSE 5 END, m.created_at DESC");
 $stmt->bind_param(
     'ssssiisss',
@@ -43,8 +44,8 @@ $stmt->bind_param(
     $hostelFilter,
     $hostelFilter,
     $search,
-    $search,
-    $search
+    $searchPattern,
+    $searchPattern
 );
 if (!$stmt->execute()) {
     error_log('CourtIQ admin maintenance query failed: ' . $stmt->error);
