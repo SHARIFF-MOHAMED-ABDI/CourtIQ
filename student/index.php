@@ -52,24 +52,11 @@ $bookingsCount = (int)$bookingsStmt->get_result()->fetch_assoc()['cnt'];
 $bookingsStmt->close();
 
 // Get booking fee (from hostel profile or fixed value)
-$feeStmt = $conn->prepare("SELECT COALESCE(h.booking_fee, 15000) AS fee FROM hostel_profiles h
-    JOIN rooms r ON r.hostel_id = h.id
-    JOIN room_allocations a ON a.room_id = r.id
-    WHERE a.student_id = ? AND a.status = 'active' LIMIT 1");
-$feeStmt->bind_param('i', $userId);
+$feeStmt = $conn->prepare("SELECT 15000 AS fee");
 $feeStmt->execute();
 $feeResult = $feeStmt->get_result()->fetch_assoc();
 $bookingFee = $feeResult ? (float)$feeResult['fee'] : 15000;
 $feeStmt->close();
-
-// If no active allocation, get default fee from first hostel
-if ($bookingFee === 15000 && !$allocation) {
-    $defaultFeeStmt = $conn->query("SELECT COALESCE(booking_fee, 15000) AS fee FROM hostel_profiles ORDER BY id LIMIT 1");
-    if ($defaultFeeStmt) {
-        $defaultFee = $defaultFeeStmt->fetch_assoc();
-        $bookingFee = $defaultFee ? (float)$defaultFee['fee'] : 15000;
-    }
-}
 
 // Render student activity chart
 $studentCharts = getStudentDashboardChartData($conn, $userId);
