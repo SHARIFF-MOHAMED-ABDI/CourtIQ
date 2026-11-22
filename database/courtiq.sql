@@ -3,12 +3,6 @@
 -- Database Schema and Initial Seed Data
 -- ==========================================================
 
-CREATE DATABASE IF NOT EXISTS `courtiq` 
-    CHARACTER SET utf8mb4 
-    COLLATE utf8mb4_unicode_ci;
-
-USE `courtiq`;
-
 -- ----------------------------------------------------------
 -- 1. Users Table (Authentication & Role-Based Access Control)
 -- ----------------------------------------------------------

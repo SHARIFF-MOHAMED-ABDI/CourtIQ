@@ -1,10 +1,5 @@
 <?php
 
-/**
- * CourtIQ: A Web-Based Hostel Management System
- * Database Configuration
- */
-
 return [
     'url'      => getenv('DATABASE_URL') ?: getenv('COURTIQ_DATABASE_URL') ?: '',
     'host'     => getenv('COURTIQ_DB_HOST') ?: '127.0.0.1',
