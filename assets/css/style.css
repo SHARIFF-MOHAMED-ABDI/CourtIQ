@@ -516,6 +516,96 @@ button, input, select, textarea {
     opacity: 1;
 }
 
+/* ==========================================================
+   Brand / Logo Styles (shared across dashboards)
+   ========================================================== */
+.brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: var(--text-heading);
+    flex-shrink: 0;
+}
+
+.brand-icon-box {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: var(--radius-md);
+    background: var(--bg-subtle);
+}
+
+.brand-svg {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.brand-text {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--color-primary);
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+}
+
+.brand-text span {
+    color: var(--color-secondary);
+}
+
+/* Admin topbar brand adjustments */
+.admin-topbar .brand-icon-box {
+    width: 36px;
+    height: 36px;
+    background: transparent;
+}
+
+.admin-topbar .brand-svg {
+    width: 32px;
+    height: 32px;
+}
+
+.admin-topbar .brand-text {
+    font-size: 1.1rem;
+}
+
+/* Student topbar brand adjustments */
+.dashboard-nav-bar .brand-icon-box {
+    width: 36px;
+    height: 36px;
+    background: transparent;
+}
+
+.dashboard-nav-bar .brand-svg {
+    width: 32px;
+    height: 32px;
+}
+
+.dashboard-nav-bar .brand-text {
+    font-size: 1.1rem;
+}
+
+/* Mobile responsiveness for brand */
+@media (max-width: 768px) {
+    .brand-icon-box {
+        width: 36px;
+        height: 36px;
+    }
+    .brand-svg {
+        width: 28px;
+        height: 28px;
+    }
+    .brand-text {
+        font-size: 1rem;
+    }
+}
+
 /* Main Content Area */
 .dashboard-content-main {
     flex: 1;
