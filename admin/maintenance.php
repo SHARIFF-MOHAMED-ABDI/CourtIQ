@@ -31,9 +31,9 @@ $stmt = $conn->prepare("SELECT m.id, m.reference_no, m.title, m.category, m.desc
     WHERE (? = '' OR m.status = ?)
       AND (? = '' OR m.category = ?)
       AND (? = 0 OR m.hostel_id = ?)
-      AND (? = '' OR COALESCE(sp.full_name, u.username) LIKE CONCAT('%', ?, '%')
-           OR m.reference_no LIKE CONCAT('%', ?, '%'))
-    ORDER BY FIELD(m.status, 'pending', 'in_progress', 'resolved', 'rejected'), m.created_at DESC");
+      AND (? = '' OR COALESCE(sp.full_name, u.username) ILIKE CONCAT('%', ?, '%')
+           OR m.reference_no ILIKE CONCAT('%', ?, '%'))
+    ORDER BY CASE m.status WHEN 'pending' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'resolved' THEN 3 WHEN 'rejected' THEN 4 ELSE 5 END, m.created_at DESC");
 $stmt->bind_param(
     'ssssiisss',
     $statusFilter,

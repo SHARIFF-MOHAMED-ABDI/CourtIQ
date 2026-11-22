@@ -7,14 +7,14 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 require __DIR__ . '/partials/scope.php';
 
-$roomStats = db()->query('SELECT COUNT(*) AS total_rooms, COALESCE(SUM(capacity), 0) AS total_capacity,
+$roomStats = db()->query("SELECT COUNT(*) AS total_rooms, COALESCE(SUM(capacity), 0) AS total_capacity,
     COALESCE(SUM(occupied), 0) AS total_occupied,
-    SUM(CASE WHEN status = "available" AND occupied < capacity THEN 1 ELSE 0 END) AS available_rooms
-    FROM rooms' . str_replace('r.', '', $hostelClause))->fetch_assoc();
+    SUM(CASE WHEN status = 'available' AND occupied < capacity THEN 1 ELSE 0 END) AS available_rooms
+    FROM rooms" . str_replace('r.', '', $hostelClause))->fetch_assoc();
 $totalCapacity = (int)$roomStats['total_capacity'];
 $totalOccupied = (int)$roomStats['total_occupied'];
 $occupancy = $totalCapacity > 0 ? (int)round($totalOccupied / $totalCapacity * 100) : 0;
-$ticketStats = db()->query("SELECT COUNT(*) AS total, SUM(status <> 'resolved') AS open_total
+$ticketStats = db()->query("SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status <> 'resolved') AS open_total
     FROM maintenance_requests m" . $maintenanceClause)->fetch_assoc();
 $residentStmt = db()->prepare("SELECT COUNT(DISTINCT ra.student_id) AS total FROM room_allocations ra
     JOIN rooms r ON r.id = ra.room_id WHERE ra.status = 'active'" . $studentClause);

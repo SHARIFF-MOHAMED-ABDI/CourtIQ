@@ -6,7 +6,7 @@ require __DIR__ . '/partials/scope.php';
 $requests = db()->query("SELECT m.id, m.reference_no, m.title, m.category, m.description, m.hostel_name_snapshot, m.room_number_snapshot,
         m.latest_response, m.priority, m.status, m.created_at, u.username AS reported_by
     FROM maintenance_requests m JOIN users u ON u.id = m.user_id" . $maintenanceClause . "
-    ORDER BY FIELD(m.status, 'pending', 'in_progress', 'resolved', 'rejected'), m.created_at DESC")->fetch_all(MYSQLI_ASSOC);
+    ORDER BY CASE m.status WHEN 'pending' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'resolved' THEN 3 WHEN 'rejected' THEN 4 ELSE 5 END, m.created_at DESC")->fetch_all(MYSQLI_ASSOC);
 ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Maintenance | CourtIQ</title><link rel="stylesheet" href="<?= projectUrl('assets/css/style.css') ?>"></head>
 <body class="dashboard-layout"><?php require __DIR__ . '/partials/nav.php'; ?><main class="dashboard-content-main container">

@@ -93,6 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->rollback();
             if ($e instanceof DomainException) {
                 $errors[] = $e->getMessage();
+            } elseif ($e instanceof PDOException && $e->getCode() === '23505') {
+                $errors[] = 'That registration number or email address is already registered.';
             } else {
                 error_log('CourtIQ student registration failed: ' . $e->getMessage());
                 $errors[] = 'Registration could not be completed. Please try again.';

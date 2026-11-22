@@ -53,7 +53,7 @@ try {
             throw new RuntimeException('You are not assigned to this hostel.');
         }
         $stmt = $conn->prepare("UPDATE maintenance_requests
-            SET status = ?, latest_response = IF(? = '', latest_response, ?)
+            SET status = ?, latest_response = CASE WHEN ? = '' THEN latest_response ELSE ? END
             WHERE id = ?");
         if (!$stmt) {
             throw new RuntimeException('Unable to prepare maintenance update.');
@@ -112,7 +112,7 @@ try {
         $stmt->bind_param('iii', $roomId, $studentId, $wardenId);
         $stmt->execute();
         $stmt->close();
-        $stmt = $conn->prepare("UPDATE rooms SET occupied = occupied + 1, status = IF(occupied + 1 >= capacity, 'occupied', 'available') WHERE id = ?");
+        $stmt = $conn->prepare("UPDATE rooms SET occupied = occupied + 1, status = CASE WHEN occupied + 1 >= capacity THEN 'occupied' ELSE 'available' END WHERE id = ?");
         $stmt->bind_param('i', $roomId);
         $stmt->execute();
         $stmt->close();

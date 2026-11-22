@@ -65,7 +65,7 @@ function renderLineChart(string $title, array $labels, array $series): string
     return $svg . '</div>';
 }
 
-function getAdminDashboardChartData(mysqli $conn): array
+function getAdminDashboardChartData(PgConnection $conn): array
 {
     $periods = [];
     $labels = [];
@@ -86,17 +86,17 @@ function getAdminDashboardChartData(mysqli $conn): array
     ];
 
     $monthlyQueries = [
-        "SELECT DATE_FORMAT(a.created_at, '%Y-%m') AS period, u.role AS series_name, COUNT(*) AS total
+        "SELECT TO_CHAR(a.created_at, 'YYYY-MM') AS period, u.role AS series_name, COUNT(*) AS total
             FROM audit_log a JOIN users u ON u.id = a.user_id
             WHERE a.action = 'login' AND u.role IN ('warden', 'student') AND a.created_at >= ?
             GROUP BY period, u.role",
-        "SELECT DATE_FORMAT(created_at, '%Y-%m') AS period, COUNT(*) AS total
+        "SELECT TO_CHAR(created_at, 'YYYY-MM') AS period, COUNT(*) AS total
             FROM users WHERE role = 'student' AND created_at >= ? GROUP BY period",
-        "SELECT DATE_FORMAT(allocated_at, '%Y-%m') AS period, COUNT(*) AS total
+        "SELECT TO_CHAR(allocated_at, 'YYYY-MM') AS period, COUNT(*) AS total
             FROM room_allocations WHERE allocated_at >= ? GROUP BY period",
-        "SELECT DATE_FORMAT(created_at, '%Y-%m') AS period, COUNT(*) AS total
+        "SELECT TO_CHAR(created_at, 'YYYY-MM') AS period, COUNT(*) AS total
             FROM maintenance_requests WHERE created_at >= ? GROUP BY period",
-        "SELECT DATE_FORMAT(payment_date, '%Y-%m') AS period, COUNT(*) AS total
+        "SELECT TO_CHAR(payment_date, 'YYYY-MM') AS period, COUNT(*) AS total
             FROM payment_records WHERE payment_date >= ? GROUP BY period",
     ];
     $seriesNames = ['Student registrations', 'Room allocations', 'Maintenance requests', 'Payments recorded'];
@@ -131,11 +131,11 @@ function getAdminDashboardChartData(mysqli $conn): array
         'Resolved' => array_fill_keys($periods, 0),
         'Rejected' => array_fill_keys($periods, 0),
     ];
-    $stmt = $conn->prepare("SELECT DATE_FORMAT(created_at, '%Y-%m') AS period,
-            SUM(status = 'pending') AS pending,
-            SUM(status = 'in_progress') AS in_progress,
-            SUM(status = 'resolved') AS resolved,
-            SUM(status = 'rejected') AS rejected
+    $stmt = $conn->prepare("SELECT TO_CHAR(created_at, 'YYYY-MM') AS period,
+            COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+            COUNT(*) FILTER (WHERE status = 'in_progress') AS in_progress,
+            COUNT(*) FILTER (WHERE status = 'resolved') AS resolved,
+            COUNT(*) FILTER (WHERE status = 'rejected') AS rejected
         FROM maintenance_requests WHERE created_at >= ? GROUP BY period");
     if (!$stmt) {
         throw new RuntimeException('Unable to prepare maintenance chart data.');
@@ -214,7 +214,7 @@ function getAdminDashboardChartData(mysqli $conn): array
     ];
 }
 
-function getStudentDashboardChartData(mysqli $conn, int $userId): array
+function getStudentDashboardChartData(PgConnection $conn, int $userId): array
 {
     $periods = [];
     $labels = [];
@@ -228,7 +228,7 @@ function getStudentDashboardChartData(mysqli $conn, int $userId): array
     $payments = array_fill_keys($periods, 0);
     $trendStart = date('Y-m-01', strtotime('-5 months'));
     $loadMonthlyCounts = static function (string $table, string $dateColumn, array &$counts) use ($conn, $userId, $trendStart): void {
-        $stmt = $conn->prepare("SELECT DATE_FORMAT($dateColumn, '%Y-%m') AS period, COUNT(*) AS total
+        $stmt = $conn->prepare("SELECT TO_CHAR($dateColumn, 'YYYY-MM') AS period, COUNT(*) AS total
             FROM $table WHERE user_id = ? AND $dateColumn >= ? GROUP BY period");
         if (!$stmt) {
             throw new RuntimeException('Unable to prepare student chart data.');
@@ -262,7 +262,7 @@ function getStudentDashboardChartData(mysqli $conn, int $userId): array
     ];
 }
 
-function getWardenDashboardChartData(mysqli $conn, array $hostelIds): array
+function getWardenDashboardChartData(PgConnection $conn, array $hostelIds): array
 {
     $periods = [];
     $labels = [];
@@ -280,8 +280,8 @@ function getWardenDashboardChartData(mysqli $conn, array $hostelIds): array
     if ($safeHostelIds) {
         $trendStart = date('Y-m-01', strtotime('-5 months'));
         $hostelList = implode(',', $safeHostelIds);
-        $stmt = $conn->prepare("SELECT DATE_FORMAT(created_at, '%Y-%m') AS period,
-                COUNT(*) AS raised, SUM(status = 'resolved') AS resolved
+        $stmt = $conn->prepare("SELECT TO_CHAR(created_at, 'YYYY-MM') AS period,
+                COUNT(*) AS raised, COUNT(*) FILTER (WHERE status = 'resolved') AS resolved
             FROM maintenance_requests
             WHERE hostel_id IN ($hostelList) AND created_at >= ?
             GROUP BY period");

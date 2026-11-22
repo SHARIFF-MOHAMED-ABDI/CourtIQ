@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Email address or username and password are required.';
         } else {
             // Query database securely using prepared statement
-            $stmt = db()->prepare('SELECT id, username, email, password_hash, role, status, approval_status FROM users WHERE (username = ? OR email = ?) LIMIT 1');
+            $stmt = db()->prepare('SELECT id, username, email, password_hash, role, status, approval_status FROM users WHERE (LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)) LIMIT 1');
 
             if ($stmt) {
                 $stmt->bind_param('ss', $usernameValue, $usernameValue);

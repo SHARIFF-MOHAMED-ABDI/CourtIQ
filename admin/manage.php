@@ -10,7 +10,7 @@ if (!in_array($approvalFilter, ['all', 'pending', 'approved', 'rejected'], true)
 $conn = db();
 $hostelId = max(0, (int)($_GET['hostel_id'] ?? 0));
 $hostelError = '';
-$stmt = $conn->prepare("SELECT id, username, email, role, status FROM users WHERE username LIKE CONCAT('%', ?, '%') OR email LIKE CONCAT('%', ?, '%') ORDER BY username");
+$stmt = $conn->prepare("SELECT id, username, email, role, status FROM users WHERE username ILIKE CONCAT('%', ?, '%') OR email ILIKE CONCAT('%', ?, '%') ORDER BY username");
 $stmt->bind_param('ss', $q, $q); $stmt->execute(); $users = $stmt->get_result()->fetch_all(MYSQLI_ASSOC); $stmt->close();
 $approvalStmt = $conn->prepare("SELECT u.id, u.email, u.approval_status, u.created_at, u.approval_decided_at,
         sp.full_name, sp.student_number, reviewer.username AS decided_by
@@ -18,7 +18,7 @@ $approvalStmt = $conn->prepare("SELECT u.id, u.email, u.approval_status, u.creat
     LEFT JOIN student_profiles sp ON sp.user_id = u.id
     LEFT JOIN users reviewer ON reviewer.id = u.approval_decided_by
     WHERE u.role = 'student' AND (? = 'all' OR u.approval_status = ?)
-    ORDER BY FIELD(u.approval_status, 'pending', 'approved', 'rejected'), u.created_at DESC");
+    ORDER BY CASE u.approval_status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 WHEN 'rejected' THEN 3 ELSE 4 END, u.created_at DESC");
 $approvalStmt->bind_param('ss', $approvalFilter, $approvalFilter);
 $approvalStmt->execute();
 $studentApprovals = $approvalStmt->get_result()->fetch_all(MYSQLI_ASSOC);

@@ -11,10 +11,10 @@ while ($row = $assignmentResult->fetch_assoc()) {
 $assignmentStmt->close();
 
 $hostelClause = $assignedHostelIds ? ' WHERE r.hostel_id IN (' . implode(',', $assignedHostelIds) . ')' : ' WHERE 1 = 0';
-$maintenanceHostelColumn = db()->query("SHOW COLUMNS FROM maintenance_requests LIKE 'hostel_id'");
-if (!$maintenanceHostelColumn) {
-    throw new RuntimeException('Unable to inspect maintenance request schema: ' . db()->error);
-}
+$maintenanceHostelColumn = db()->query("SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'maintenance_requests'
+      AND column_name = 'hostel_id'");
 $maintenanceClause = ' WHERE 1 = 0';
 if ($assignedHostelIds) {
     $hostelIds = implode(',', $assignedHostelIds);

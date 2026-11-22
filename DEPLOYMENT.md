@@ -1,49 +1,61 @@
-# CourtIQ cPanel Deployment
+# CourtIQ PostgreSQL Deployment
 
 ## Requirements
 
-- PHP 8.1 or newer
-- MySQL/MariaDB
+- PHP 8.3 or newer
+- PostgreSQL
 - Apache with PHP enabled
-- PHP extensions: `mysqli`, `mbstring`, `openssl`, `session`, and `json`
+- Runtime extensions: `pdo_pgsql`, `mysqli`, `mbstring`, `openssl`, `session`, and `json`
+- Migration CLI extension: `pdo_mysql`
 
-## Upload
+## Create the PostgreSQL schema
 
-1. Create a MySQL database and database user in cPanel.
-2. Grant the user all privileges on the CourtIQ database.
-3. Import `database/courtiq.sql` through phpMyAdmin.
-4. Upload the project contents into `public_html` or the desired subdomain directory.
-5. Update `config/database.php` with the hosting database host, username, password, database name, and port.
-6. Enable HTTPS in the hosting control panel.
+Run `database/courtiq.postgres.sql` against an empty PostgreSQL database. The legacy `database/courtiq.sql` and files under `database/migrations/` are for MySQL/MariaDB and must not be used to initialize PostgreSQL.
 
-The configuration also supports these environment variables when the host provides them:
+The app accepts a PostgreSQL URL in `DATABASE_URL` (recommended) or separate values in these environment variables:
 
 - `COURTIQ_DB_HOST`
 - `COURTIQ_DB_USER`
 - `COURTIQ_DB_PASSWORD`
 - `COURTIQ_DB_NAME`
 - `COURTIQ_DB_PORT`
+- `COURTIQ_DB_SSLMODE` (optional)
 
-## First check
+## Migrate existing XAMPP records
 
-Open the public domain in a browser and confirm the landing page loads. Test login with the administrator account, then change the seeded development passwords immediately.
+The migration script copies data from the local MySQL database into the PostgreSQL schema, preserves IDs, and resets identity sequences. It refuses to run if any destination table already contains rows.
 
-## Security
+1. Keep XAMPP MySQL running and ensure the Render PostgreSQL database is empty. The migration script creates the schema before copying data.
+2. Create a local `.env.migrate` file in the project root (it is ignored by Git) with the source MySQL settings and the PostgreSQL **external** connection URL:
 
-- Do not upload or expose database backups.
-- Do not use the local `root` database account in production.
-- Do not share cPanel or database passwords in chat.
-- Keep HTTPS enabled.
-- Remove or disable demo credentials before production use.
+   ```text
+   COURTIQ_SOURCE_DB_HOST=host.docker.internal
+   COURTIQ_SOURCE_DB_PORT=3306
+   COURTIQ_SOURCE_DB_NAME=courtiq
+   COURTIQ_SOURCE_DB_USER=root
+   COURTIQ_SOURCE_DB_PASSWORD=your-local-mysql-password
+   DATABASE_URL=your-render-postgresql-external-url
+   ```
+
+3. Build the image locally, then run the CLI migration:
+
+   ```powershell
+   docker build -t courtiq-migration .
+   docker run --rm --env-file .env.migrate --entrypoint php courtiq-migration /var/www/html/database/migrate-mysql-to-postgres.php
+   ```
+
+4. Confirm the script reports successful row counts. Do not share or commit `.env.migrate`.
+
+The migration copies existing data; it does not send records to this assistant. If XAMPP is on a different computer, use a network-accessible MySQL host and restrict access to your own machine while migrating.
 
 ## Render Deployment
 
-CourtIQ is a PHP application. In Render, create or update the service as a **Web Service** with **Docker** as its language/runtime. The root-level `Dockerfile` installs the PHP MySQLi extension, enables Apache rewrite rules, and starts Apache.
+CourtIQ is a PHP application. In Render, create the web service with **Docker** as its runtime. The root-level `Dockerfile` installs the PHP PostgreSQL driver and enables Apache rewrite rules.
 
 - **Dockerfile Path:** `./Dockerfile`
 - **Build Command:** leave blank; Render builds the Dockerfile.
-- **Start Command / Docker Command:** leave blank; the PHP Apache image starts Apache by default.
-- **Environment variable:** set `PORT` to `80` to match the Apache listener.
-- Set `COURTIQ_DB_HOST`, `COURTIQ_DB_USER`, `COURTIQ_DB_PASSWORD`, `COURTIQ_DB_NAME`, and `COURTIQ_DB_PORT` to the values for an externally hosted MySQL database. Do not use `127.0.0.1` unless MySQL runs in the same container.
+- **Start Command / Docker Command:** leave blank, or use `apache2-foreground`.
+- Set `PORT` to `80` to match the Apache listener.
+- Set `DATABASE_URL` to the PostgreSQL **internal** connection URL for the Render web service. Use the external URL only for a migration run from your computer.
 
-Do not use `yarn` or `yarn start`; this repository has no Node.js package manifest.
+Do not use `yarn` or `yarn start`; this repository has no Node.js package manifest. Keep HTTPS enabled, use strong database credentials, and change any development passwords before production use.

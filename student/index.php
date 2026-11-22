@@ -25,9 +25,9 @@ $paymentStmt->execute();
 $payment = $paymentStmt->get_result()->fetch_assoc();
 $paymentStmt->close();
 $statsStmt = $conn->prepare("SELECT COUNT(*) AS tickets,
-    COALESCE(SUM(status = 'pending'), 0) AS pending_tickets,
-    COALESCE(SUM(status = 'in_progress'), 0) AS in_progress_tickets,
-    COALESCE(SUM(status = 'resolved'), 0) AS resolved_tickets
+    COUNT(*) FILTER (WHERE status = 'pending') AS pending_tickets,
+    COUNT(*) FILTER (WHERE status = 'in_progress') AS in_progress_tickets,
+    COUNT(*) FILTER (WHERE status = 'resolved') AS resolved_tickets
     FROM maintenance_requests WHERE user_id = ?");
 $statsStmt->bind_param('i', $userId);
 $statsStmt->execute();
@@ -40,7 +40,7 @@ $latestMaintenanceStmt->bind_param('i', $userId);
 $latestMaintenanceStmt->execute();
 $latestMaintenance = $latestMaintenanceStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $latestMaintenanceStmt->close();
-$paidMonthsStmt = $conn->prepare("SELECT COUNT(DISTINCT DATE_FORMAT(payment_date, '%Y-%m')) AS paid_months FROM payment_records WHERE user_id = ?");
+$paidMonthsStmt = $conn->prepare("SELECT COUNT(DISTINCT TO_CHAR(payment_date, 'YYYY-MM')) AS paid_months FROM payment_records WHERE user_id = ?");
 $paidMonthsStmt->bind_param('i', $userId);
 $paidMonthsStmt->execute();
 $paidMonths = $paidMonthsStmt->get_result()->fetch_assoc();

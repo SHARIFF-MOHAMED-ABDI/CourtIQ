@@ -42,8 +42,8 @@ if ($action === 'profile_save') {
         $st->close();
         $st = $conn->prepare('INSERT INTO student_profiles(user_id,full_name,student_number,phone,course,year_of_study,emergency_contact)
             VALUES(?,?,?,?,?,?,?)
-            ON DUPLICATE KEY UPDATE full_name=VALUES(full_name),student_number=VALUES(student_number),phone=VALUES(phone),
-                course=VALUES(course),year_of_study=VALUES(year_of_study),emergency_contact=VALUES(emergency_contact)');
+            ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name,student_number=EXCLUDED.student_number,phone=EXCLUDED.phone,
+                course=EXCLUDED.course,year_of_study=EXCLUDED.year_of_study,emergency_contact=EXCLUDED.emergency_contact');
         if (!$st) {
             throw new RuntimeException('Unable to prepare student profile update.');
         }

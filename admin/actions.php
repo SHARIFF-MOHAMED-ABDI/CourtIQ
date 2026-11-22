@@ -86,8 +86,8 @@ try {
         }
         $oldStatus = $request['status'];
         $st = $conn->prepare("UPDATE maintenance_requests
-            SET status = ?, latest_response = IF(? = '', latest_response, ?),
-                resolution_notes = IF(? = '', resolution_notes, ?)
+            SET status = ?, latest_response = CASE WHEN ? = '' THEN latest_response ELSE ? END,
+                resolution_notes = CASE WHEN ? = '' THEN resolution_notes ELSE ? END
             WHERE id = ?");
         if (!$st) {
             throw new RuntimeException('Unable to prepare maintenance update.');
@@ -172,7 +172,7 @@ try {
             $st->bind_param('i', $current['id']);
             $st->execute();
             $st->close();
-            $st = $conn->prepare("UPDATE rooms SET occupied = GREATEST(occupied - 1, 0), status = IF(status = 'maintenance', status, IF(GREATEST(occupied - 1, 0) >= capacity, 'occupied', 'available')) WHERE id = ?");
+            $st = $conn->prepare("UPDATE rooms SET occupied = GREATEST(occupied - 1, 0), status = CASE WHEN status = 'maintenance' THEN status WHEN GREATEST(occupied - 1, 0) >= capacity THEN 'occupied' ELSE 'available' END WHERE id = ?");
             $st->bind_param('i', $oldRoomId);
             $st->execute();
             $st->close();
@@ -182,7 +182,7 @@ try {
         $st->bind_param('iii', $roomId, $studentId, $adminId);
         $st->execute();
         $st->close();
-        $st = $conn->prepare("UPDATE rooms SET occupied = occupied + 1, status = IF(occupied + 1 >= capacity, 'occupied', 'available') WHERE id = ?");
+        $st = $conn->prepare("UPDATE rooms SET occupied = occupied + 1, status = CASE WHEN occupied + 1 >= capacity THEN 'occupied' ELSE 'available' END WHERE id = ?");
         $st->bind_param('i', $roomId);
         $st->execute();
         $st->close();
@@ -216,7 +216,7 @@ try {
         $st->execute();
         $st->close();
         $roomId = (int)$allocation['room_id'];
-        $st = $conn->prepare("UPDATE rooms SET occupied = GREATEST(occupied - 1, 0), status = IF(status = 'maintenance', status, IF(GREATEST(occupied - 1, 0) >= capacity, 'occupied', 'available')) WHERE id = ?");
+        $st = $conn->prepare("UPDATE rooms SET occupied = GREATEST(occupied - 1, 0), status = CASE WHEN status = 'maintenance' THEN status WHEN GREATEST(occupied - 1, 0) >= capacity THEN 'occupied' ELSE 'available' END WHERE id = ?");
         $st->bind_param('i', $roomId);
         $st->execute();
         $st->close();
@@ -238,7 +238,7 @@ try {
         if ($wardenId < 1 || $hostelId < 1 || ($returnHostelId > 0 && $returnHostelId !== $hostelId)) {
             throw new RuntimeException('Select a warden and hostel.');
         }
-        $st = $conn->prepare('SELECT id FROM users WHERE id = ? AND role = "warden" AND status = "active"');
+        $st = $conn->prepare("SELECT id FROM users WHERE id = ? AND role = 'warden' AND status = 'active'");
         $st->bind_param('i', $wardenId);
         $st->execute();
         if (!$st->get_result()->fetch_assoc()) {
@@ -252,7 +252,7 @@ try {
             throw new RuntimeException('The selected hostel does not exist.');
         }
         $st->close();
-        $st = $conn->prepare('INSERT INTO warden_assignments (warden_id, hostel_id, active) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE active = 1, assigned_at = CURRENT_TIMESTAMP');
+        $st = $conn->prepare('INSERT INTO warden_assignments (warden_id, hostel_id, active) VALUES (?, ?, 1) ON CONFLICT (warden_id, hostel_id, active) DO UPDATE SET assigned_at = CURRENT_TIMESTAMP');
         $st->bind_param('ii', $wardenId, $hostelId);
         $st->execute();
         $st->close();

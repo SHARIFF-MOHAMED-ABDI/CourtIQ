@@ -1,7 +1,7 @@
 <?php
 
 function recordMaintenanceHistory(
-    mysqli $conn,
+    PgConnection $conn,
     int $requestId,
     ?int $actorId,
     string $action,
@@ -27,7 +27,7 @@ function recordMaintenanceHistory(
     $stmt->close();
 }
 
-function createUserNotification(mysqli $conn, int $userId, string $title, string $message): void
+function createUserNotification(PgConnection $conn, int $userId, string $title, string $message): void
 {
     $stmt = $conn->prepare('INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)');
     if (!$stmt) {

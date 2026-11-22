@@ -8,7 +8,7 @@ $studentStmt = db()->prepare("SELECT u.id, u.username FROM users u
     JOIN room_allocations ra ON ra.student_id = u.id AND ra.status = 'active'
     JOIN rooms r ON r.id = ra.room_id
     WHERE u.role = 'student' AND u.status = 'active' AND u.approval_status = 'approved'
-    AND (u.username LIKE CONCAT('%', ?, '%') OR u.email LIKE CONCAT('%', ?, '%'))" . $studentClause . "
+    AND (u.username ILIKE CONCAT('%', ?, '%') OR u.email ILIKE CONCAT('%', ?, '%'))" . $studentClause . "
     GROUP BY u.id, u.username ORDER BY u.username");
 $studentStmt->bind_param('ss', $studentSearch, $studentSearch);
 $studentStmt->execute();
