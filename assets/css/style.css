@@ -608,44 +608,94 @@ button, input, select, textarea {
     gap: 12px;
 }
 
+
+/* COURTIQ Brand Logo */
 .brand-icon-box {
-    width: 10px !important;
-    height: 10px !important;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 10px !important;
+    flex: 0 0 36px;
 }
 
 .brand-svg,
-.sidebar-brand img,
 .brand-logo {
-    width: 10px !important;
-    height: 10px !important;
+    width: 36px;
+    height: 36px;
     object-fit: contain;
 }
 
-.sidebar-nav-icon svg {
-    width: 6px !important;
-    height: 6px !important;
-    flex: 0 0 6px !important;
+/* Administrator Dashboard Logo */
+.admin-dashboard .sidebar-brand img,
+.admin-dashboard .sidebar-brand svg {
+    width: 36px !important;
+    height: 36px !important;
+    max-width: 36px;
+    max-height: 36px;
+    object-fit: contain;
+    flex-shrink: 0;
 }
 
-.stat-card-icon svg {
-    width: 8px !important;
-    height: 8px !important;
-    flex: 0 0 8px !important;
+/* Administrator Sidebar Navigation */
+.admin-dashboard .sidebar-nav-icon {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.btn svg,
-button svg {
-    width: 6px !important;
-    height: 6px !important;
-    flex: 0 0 6px !important;
+.admin-dashboard .sidebar-nav-icon svg {
+    width: 16px !important;
+    height: 16px !important;
+    max-width: 16px;
+    max-height: 16px;
+    flex: 0 0 16px !important;
 }
 
-svg {
-    max-width: none !important;
+/* Administrator Statistics Icon Container */
+.admin-dashboard .stat-card-icon {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    flex: 0 0 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+/* Administrator Statistics SVG Icons */
+.admin-dashboard .stat-card-icon svg {
+    display: block;
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px;
+    max-width: 18px;
+    min-height: 18px;
+    max-height: 18px;
+    flex: 0 0 18px !important;
+}
+
+/* Administrator Button Icons */
+.admin-dashboard .btn svg,
+.admin-dashboard button svg {
+    width: 16px !important;
+    height: 16px !important;
+    flex: 0 0 16px !important;
+}
+
+/* Preserve graph and chart dimensions */
+.admin-dashboard .line-chart-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
 }
 
 .student-sidebar,
