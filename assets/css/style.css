@@ -609,20 +609,44 @@ button, input, select, textarea {
 }
 
 .brand-icon-box {
-    width: 45px;
-    height: 45px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 45px;
+    flex: 0 0 40px;
 }
 
 .brand-svg,
 .sidebar-brand img,
 .brand-logo {
-    width: 45px;
-    height: 45px;
+    width: 40px;
+    height: 40px;
     object-fit: contain;
+}
+
+.sidebar-nav-icon svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+}
+
+.stat-card-icon svg {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+}
+
+.btn svg,
+button svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+}
+
+.student-sidebar,
+#studentSidebar {
+    width: 240px;
 }
 
 .brand-text {
