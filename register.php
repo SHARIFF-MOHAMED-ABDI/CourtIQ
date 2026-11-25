@@ -66,7 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$userStmt) {
                 throw new RuntimeException('Unable to prepare account registration.');
             }
-            $userStmt->bind_param('ssss', $username, $registration['email'], $passwordHash, $role, $approvalStatus);
+            
+$userStmt->bind_param('sssss', $username, $registration['email'], $passwordHash, $role, $approvalStatus);
+
             if (!$userStmt->execute()) {
                 $errorCode = $userStmt->errno;
                 $userStmt->close();
@@ -131,7 +133,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <a class="brand" href="<?= projectUrl('index.php') ?>"><span class="brand-text">Court<span>IQ</span></span></a>
                 <span class="form-tag">Student Portal</span>
                 <h1 class="form-title">Create a student account</h1>
-                <p class="form-subtitle">Your account will be reviewed by an administrator before access is enabled. <strong>Note:</strong> The first registered account becomes the Administrator automatically.</p>
+                <p class="form-subtitle">Your account will be reviewed by an administrator before access is enabled. <p class="form-subtitle">
+    Your account will be reviewed by an administrator before access is enabled.
+</p>.</p>
             </header>
 
             <?php if ($registered): ?>
