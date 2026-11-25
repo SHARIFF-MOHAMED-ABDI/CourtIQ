@@ -266,7 +266,7 @@ try {
         $st->execute();
         $st->close();
     }
-    if ($action === 'user_save') {
+    elseif ($action === 'user_save') {
         $username=trim((string)$_POST['username']); $email=trim((string)$_POST['email']); $password=(string)$_POST['password']; $role=(string)$_POST['role']; $status=(string)$_POST['status'];
         if(!preg_match('/^[A-Za-z0-9._-]{3,80}$/',$username)||!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($password)<8||!in_array($role,['student','warden','administrator'],true)||!in_array($status,['active','inactive','suspended'],true)) throw new RuntimeException('Invalid user details');
         $hash=password_hash($password,PASSWORD_DEFAULT); $st=$conn->prepare('INSERT INTO users(username,email,password_hash,role,status) VALUES(?,?,?,?,?)'); $st->bind_param('sssss',$username,$email,$hash,$role,$status); $st->execute(); $st->close();
