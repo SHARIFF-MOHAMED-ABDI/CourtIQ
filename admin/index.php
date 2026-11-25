@@ -48,20 +48,196 @@ $approvalChart = renderLineChart(
     $dashboardCharts['approvals']['series']
 );
 ?>
+
 <!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Administrator | CourtIQ</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="<?= projectUrl('assets/css/style.css?v=' . filemtime(__DIR__ . '/../assets/css/style.css')) ?>">
+
+    <!-- COURTIQ ADMINISTRATOR OVERVIEW STYLING -->
+    <style>
+        /* Main dashboard typography */
+        .admin-dashboard {
+            font-family: 'DM Sans', 'Segoe UI', Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #334155;
+        }
+
+        /* Administrator Overview heading */
+        .admin-dashboard .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .admin-dashboard .dashboard-header-eyebrow {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: #2563eb;
+        }
+
+        .admin-dashboard .dashboard-header-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1.3;
+            color: #0f172a;
+            margin: 6px 0;
+        }
+
+        .admin-dashboard .dashboard-header-subtitle {
+            font-size: 14px;
+            font-weight: 400;
+            color: #64748b;
+        }
+
+        /* Statistics cards layout */
+        .admin-dashboard .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .admin-dashboard .stat-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 20px;
+            min-width: 0;
+            box-shadow: 0 3px 12px rgba(15, 23, 42, 0.04);
+        }
+
+        .admin-dashboard .stat-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .admin-dashboard .stat-card-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: #64748b;
+        }
+
+        .admin-dashboard .stat-card-value {
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1.2;
+            color: #0f172a;
+        }
+
+        .admin-dashboard .stat-card-desc {
+            font-size: 12px;
+            font-weight: 400;
+            color: #64748b;
+            margin-top: 8px;
+        }
+
+        /* Small professional statistics icons */
+        .admin-dashboard .stat-card-icon {
+            width: 38px;
+            height: 38px;
+            flex: 0 0 38px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .admin-dashboard .stat-card-icon svg {
+            width: 20px !important;
+            height: 20px !important;
+            max-width: 20px !important;
+            max-height: 20px !important;
+            flex: 0 0 20px;
+        }
+
+        .admin-dashboard .stat-card-icon--blue {
+            background: #eff6ff;
+            color: #2563eb;
+        }
+
+        .admin-dashboard .stat-card-icon--green {
+            background: #ecfdf5;
+            color: #059669;
+        }
+
+        .admin-dashboard .stat-card-icon--yellow {
+            background: #fffbeb;
+            color: #d97706;
+        }
+
+        .admin-dashboard .stat-card-icon--purple {
+            background: #f5f3ff;
+            color: #7c3aed;
+        }
+
+        /* Chart headings and descriptions */
+        .admin-dashboard .visual-card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .admin-dashboard .visual-card-subtitle {
+            font-size: 13px;
+            font-weight: 400;
+            color: #64748b;
+            margin-bottom: 14px;
+        }
+
+        /* Preserve existing line charts */
+        .admin-dashboard .line-chart-svg {
+            width: 100%;
+            height: auto;
+            max-width: 100%;
+        }
+
+        /* Responsive statistics */
+        @media (max-width: 1100px) {
+            .admin-dashboard .stats-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 600px) {
+            .admin-dashboard .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .admin-dashboard .dashboard-header-title {
+                font-size: 23px;
+            }
+        }
+    </style>
 </head>
-<body class="dashboard-layout has-sidebar admin-dashboard" data-dashboard-chart-endpoint="<?= e(projectUrl('admin/dashboard-data.php')) ?>">
-    <?php require __DIR__ . '/partials/sidebar.php'; ?>
-    <main class="dashboard-content-main">
+
+
+<body class="dashboard-layout admin-dashboard"
+      data-dashboard-chart-endpoint="<?= e(projectUrl('admin/dashboard-data.php')) ?>">
+
+    <?php require __DIR__ . '/partials/nav.php'; ?>
+
+    <main class="dashboard-content-main container admin-main">
         <?php if (!empty($_GET['error'])): ?><div class="alert alert--error"><?= e($_GET['error']) ?></div><?php endif; ?>
         <?php if (!empty($_GET['success'])): ?><div class="alert alert--success">Changes saved successfully.</div><?php endif; ?>
 
